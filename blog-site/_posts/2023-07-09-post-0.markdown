@@ -1,0 +1,9 @@
+---
+layout: post
+title: "Intro"
+date: 2023-07-09 13:00:42 -0700
+---
+
+{% include math.html %}
+
+One of my goals this year is to practice writing more and I figured a fun way to do that would be to write about my learnings on some fun topics that interest me, so that's what this blog will be about.
