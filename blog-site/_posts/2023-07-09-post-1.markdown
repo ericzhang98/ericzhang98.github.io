@@ -1,0 +1,266 @@
+---
+layout: post
+title: "The Fast Fourier Transform and Polynomial Multiplication"
+date: 2023-07-09 13:00:42 -0700
+---
+
+{% include math.html %}
+I want to brush up on some of the math topics I learned about in undergrad, and so the topic of choice today is to relearn the Fourier Transform – its continuous and discrete versions, and the Cooley-Tukey algorithm for computing it quickly. It’s one of the most important algorithmic discoveries of the 20th century and is ubiquitous in modern technology.
+
+Let’s start by reviewing the continuous Fourier Transform:
+
+$$F(\omega)=\int_{-\infty}^{\infty} f(t) e^{-j\omega t} dt$$
+
+and its inverse:
+
+$$f(t)=\frac{1}{2\pi}\int_{-\infty}^{\infty} F(\omega) e^{j\omega t} d\omega$$
+
+The Fourier Transform transforms a signal in the time domain $$f(t)$$ to a signal in the frequency domain $$F(\omega)$$.
+You can think of the frequency component of a signal at a particular frequency $$\omega$$ as the average point-value when the signal is wrapped around the unit circle at that frequency. [0]
+
+If you were to take the sum of all the frequency signals $$e^{jw\tau}$$ and weight them by their frequency domain values $$F(\omega)$$, you’d get the original sum back, which is what the Inverse Fourier Transform is doing. A $$\frac{1}{2\pi}$$ normalization constant is needed when taking the inverse since, by convention, the forward Fourier transform doesn’t actually average the frequency weights and instead computes the total magnitude, which is the average times $$\frac{1}{2\pi}$$.
+
+So what’s the point of all this? The purpose of transforming signals into the frequency domain is that certain operations are much simpler to compute in the frequency domain than in the time domain, namely convolution:
+
+$$(f*g)(t)=\int_{-\infty}^{\infty}f(\tau)g(t-\tau)d\tau$$
+
+You can think of a convolution as a sort of multiplication of two signals. At each infinitesimal point in time $$\tau$$ along the first signal (represented by $$d \tau$$), the second signal is “started” as an output with an intensity equal to the first signal at that point in time, $$f(\tau)$$. The resulting convolved signal’s output at time $$t$$ is thus the sum of all the output signals that have “started” before time $$t$$ (hence the integral), with each infinitesimal output signal having progressed $$t-\tau$$ in time.
+
+Computing the convolution of two signals directly in the time domain is usually hard, but it becomes really easy using the Convolution Theorem:
+
+$$(f*g)(t)\Longleftrightarrow F(\omega)G(\omega)$$
+
+The Convolution Theorem states that the convolution of two signals in the time domain is equivalent to the product of two signals in the frequency domain. This means that to compute the convolution of two signals, we can take the Fourier transform of each signal, multiply them together, and then take the Inverse Fourier Transform to get the desired time domain result.
+
+Great, so we have these potentially useful continuous functions, but how do we actually utilize them in our computers? Well, let’s check out the finite and discrete version of all this. The Discrete Fourier Transform is defined as:
+
+$$X[k]=\sum_{n=0}^{N-1} x[n] e^{-j\frac{2\pi}{N}kn}$$
+
+and its inverse is:
+
+$$x[n]=\frac{1}{N}\sum_{k=0}^{N-1} X[k] e^{j\frac{2\pi}{N}kn}$$
+
+We’re now transforming a finite discrete signal (vector) in the time domain $$x[n]$$ to a finite discrete signal in the frequency domain $$X[k]$$, both of length $$N$$.
+
+Rather than computing the total magnitude of the discrete signal at every frequency, we only care about a finite $$N$$ amount of frequencies, specifically the frequencies at $$0, \frac{2\pi}{N}, \frac{2\pi 2}{N}, \ldots, \frac{2\pi (N-1)}{N}$$. The complementary Inverse Discrete Fourier Transform computes the sum across those $$N$$ frequencies, weighted by their frequency domain values as well.
+
+The discrete convolution [1] looks the exact same, but in a discrete form:
+
+$$(f*g)[n]=\sum_{m=0}^{N-1}f[m]g[n-m]$$
+
+We are again just summing up the weighted superposition of one signal being “started” by the other signal (weighted by its magnitude) as it progresses through each discrete unit of time.
+
+Just like its continuous version, the discrete convolution can also be computed more efficiently by taking the Discrete Fourier Transform of both signals, multiplying them (vector dot product), and then applying the Inverse Discrete Fourier Transform.
+
+With this refresher of the Fourier Transform and convolution, we’re now ready to start exploring how to compute them in practice. Our first goal is to write a simple program that calculates the Discrete Fourier Transform and its inverse naively.
+
+Each output term $$X[k]$$ for a particular frequency $$k$$ is:
+
+$$\sum_{n=0}^{N-1} x[n] e^{-j\frac{2\pi}{N}kn} = \sum_{n=0}^{N-1} x[n] \omega_N^{kn}$$
+
+i.e. the vector dot product between $$[x[0], x[1], x[2], .., x[N-1]]$$ and $$[\omega^0, \omega^k, \omega^{2k}, .., \omega^{(N-1)k}]$$, where $$\omega = e^{-j\frac{2\pi}{N}}$$. Computing the dot product for a particular $$X[k]$$ costs $$N$$ operations, and so computing $$X[k]$$ for all $$k$$ requires $$N^2$$ operations. Similarly, the Inverse Discrete Fourier Transform is the same dot product operation, but with $$\omega = e^{j\frac{2\pi}{N}}$$ instead.
+
+Here’s some python code that does that:
+
+{% highlight python %}
+import math
+j = complex(0, 1)
+
+def round_complex_number(c):
+    return round(c.real, 10) + round(c.imag, 10) * 1j
+
+def round_complex_array(C):
+    return [round_complex_number(c) for c in C]
+
+# Naive Fourier Transform
+def naive_discrete_fourier_transform(x):
+    N = len(x)
+    X = [None] * N
+    for k in range(N):
+        X[k] = sum(x[n] * math.e ** (-j * 2 * math.pi / N * k * n) for n in range(N))
+    return round_complex_array(X)
+
+def inverse_naive_discrete_fourier_transform(X):
+    N = len(X)
+    x = [None] * N
+    for n in range(N):
+        x[n] = 1 / N * sum(X[k] * math.e ** (j * 2 * math.pi / N * k * n) for k in range(N))
+    return round_complex_array(x)
+
+x = [0, 1, 2, 3]
+X = naive_discrete_fourier_transform(x)
+print(X)
+# => [(6+0j), (-2+2j), (-2+0j), (-2-2j)]
+x = inverse_naive_discrete_fourier_transform(X)
+print(x)
+# => [0j, (1+0j), (2+0j), (3+0j)]
+{% endhighlight %}
+
+Alright, so how can we speed this up? Well it turns out there are some special properties involving the roots of unity that we can use.
+
+The $$N$$ different $$N$$th roots of unity are $$\omega_N^k = e^{-j\frac{2\pi}{N}k}$$ for $$k = 0 \ldots N-1$$. The principal $$N$$th root of unity is $$\omega_N^1 = e^{-j\frac{2\pi}{N}}$$, with the other $$N-1$$ roots being different powers of the principal $$N$$th root.
+
+The crucial property of the roots of unity that we will use is the halving lemma – for even $$N$$, when we square each of the $$N$$ different $$N$$th roots of unity, we end up with the $$N/2$$ different $$N/2$$th roots of unity, twice. Concretely, the squaring operation maps exactly two of the $$N$$th roots of unity ($$\omega_N^k$$ and $$\omega_N^{k+N/2}$$) to one of the $$N/2$$th roots of unity ($$\omega_{N/2}^k$$). For example, with $$N = 8$$, we have:
+
+$$(\omega_N^0)^2 = (\omega_N^4)^2 = \omega_{N/2}^0, (\omega_N^1)^2 = (\omega_N^5)^2 = \omega_{N/2}^1, (\omega_N^2)^2 = (\omega_N^6)^2 = \omega_{N/2}^2, (\omega_N^3)^2 = (\omega_N^7)^2 = \omega_{N/2}^3$$
+
+The equivalency of $$\omega_N^k$$ and $$\omega_N^{k+N/2}$$ when squared will be the main property we utilize in a divide-and-conquer algorithm to compute the Fourier Transform efficiently.
+
+Let’s start off by defining some notation.
+Let
+
+$$DFT(\omega) = \sum_{n=0}^{N-1} x[n] \omega^n = x[0] + x[1] \omega + x[2] \omega^2 + \ldots + x[N-1] \omega^{N-1}$$
+
+be the polynomial expression of the Fourier Transform and let
+
+$$DFT^{even}(\omega) = \sum_{n=0}^{N/2-1} x[2n] \omega^n = x[0] + x[2] \omega + x[4] \omega^2 + \ldots + x[N/2 - 1] \omega^{N/2-1}$$
+
+and
+
+$$DFT^{odd}(\omega) = \sum_{n=0}^{N/2-1} x[2n+1] \omega^n = x[1] + x[3] \omega + x[5] \omega^2 + \ldots + x[N/2] \omega ^{N/2 - 1}$$
+
+be the polynomial expressions containing just the even and odd coefficients, respectively. Note that we require $$N$$ to be a power of two for our divide-and-conquer algorithm to work. The algorithm for general lengths is more involved, but the core ideas are similar.
+
+Our goal is to compute
+
+$$X[k] = DFT(\omega_N^k) = \sum_{n=0}^{N-1} x[n] \omega_N^{kn}$$
+
+for each $$k = 0 \ldots N - 1$$.
+We can rewrite this as
+
+$$DFT(\omega_N^k) = DFT^{even}((\omega_N^{k})^2) + DFT^{odd}((\omega_N^{k})^2) \cdot \omega_N^k$$
+
+$$= DFT^{even}(\omega_{N/2}^{k}) + DFT^{odd}(\omega_{N/2}^{k}) \cdot \omega_N^k$$
+
+using the halving lemma from earlier since $$\omega_N^{2k} = \omega_{N/2}^k$$. Thus, the original $$N$$-length Fourier Transform polynomial can be computed using the results of the $$N/2$$-length Fourier Transform containing the original polynomial’s even and odd coefficients. Ok, so we’ve written the equation as 2 recursive sub-problems of half size, but haven’t gained any efficiency yet since we still need to compute these sub-problems for each $$k$$, so what now? Well, the clever insight, using the halving lemma we mentioned earlier, is that
+
+$$DFT(\omega_N^{k+N/2}) = DFT^{even}((\omega_N^{(k+N/2)})^2) + DFT^{odd}((\omega_N^{k+N/2})^2) \cdot \omega_N^{k+N/2}$$
+
+$$= DFT^{even}(\omega_{N/2}^k) + DFT^{odd}(\omega_{N/2}^k) \cdot \omega_N^{k+N/2}$$
+
+$$= DFT^{even}(\omega_{N/2}^k) - DFT^{odd}(\omega_{N/2}^k) \cdot \omega_N^k$$
+
+So both $$DFT(\omega_N^k)$$ and $$DFT(\omega_N^{k+N/2})$$ can be computed using the same results of $$DFT^{even}(\omega_{N/2}^k)$$ and $$DFT^{odd}(\omega_{N/2}^k)$$, with the only difference being a switch in the sign of the $$\omega_N^k$$ factor -- known as a “twiddle factor”.
+
+Thus, the original problem of computing $$N$$ different $$N$$-length Fourier Transforms can be solved by recursively computing $$2N$$ different $$N/2$$-length Fourier Transforms. A classic divide-and-conquer approach resulting in a runtime of $$O(N \log N)$$! This algorithm is known as the Cooley-Tukey algorithm and the most common Fast Fourier Transform algorithm used today. We can also use the exact same algorithm to compute the inverse transform by defining $$\omega_N^k = e^{j\frac{2\pi}{N}k}$$ instead (reversing the sign).
+
+Here’s the algorithm coded up in python:
+{% highlight python %}
+# Fast Fourier Transform
+def fast_fourier_transform_recursive(x):
+    N = len(x)
+    if N == 1:
+        return x
+    # principle Nth root of unity (negative version)
+    w_N = math.e ** (-j * 2 * math.pi / N)
+    # current twiddle factor
+    w = 1
+    # compute the Fourier Transform of the even and odd indices
+    x_even = [x[n] for n in range(0, N, 2)]
+    x_odd = [x[n] for n in range(1, N, 2)]
+    X_even = fast_fourier_transform_recursive(x_even)
+    X_odd = fast_fourier_transform_recursive(x_odd)
+    X = [None] * N
+    for k in range(N // 2):
+        # X[k] and X[k + N // 2] are computed using the same even and odd coefficients
+        # by just reversing the sign of the twiddle factor of the odd component
+        X[k] = X_even[k] + w * X_odd[k]
+        X[k + N // 2] = X_even[k] - w * X_odd[k]
+        w = w * w_N
+    return X
+
+def fast_fourier_transform(x):
+    N = len(x)
+    assert N >= 1 and (N & (N-1)) == 0
+    X = fast_fourier_transform_recursive(x)
+    return round_complex_array(X)
+
+def inverse_fast_fourier_transform_recursive(X):
+    N = len(X)
+    if N == 1:
+        return X
+    # principle Nth root of unity (positive version)
+    w_N = math.e ** (j * 2 * math.pi / N)
+    # current twiddle factor
+    w = 1
+    X_even = [X[k] for k in range(0, N, 2)]
+    X_odd = [X[k] for k in range(1, N, 2)]
+    x_even = inverse_fast_fourier_transform_recursive(X_even)
+    x_odd = inverse_fast_fourier_transform_recursive(X_odd)
+    x = [None] * N
+    for n in range(N // 2):
+        # x[n] and x[n + N // 2] are computed using the same even and odd coefficients
+        # by just reversing the sign of the twiddle factor of the odd component
+        x[n] = x_even[n] + w * x_odd[n]
+        x[n + N // 2] = x_even[n] - w * x_odd[n]
+        w = w * w_N
+    return x
+
+def inverse_fast_fourier_transform(X):
+    N = len(X)
+    assert N >= 1 and (N & (N-1)) == 0
+    x = inverse_fast_fourier_transform_recursive(X)
+    # normalize by dividing by N
+    x_normalized = [x_n / N for x_n in x]
+    return round_complex_array(x_normalized)
+
+x = [0, 1, 2, 3]
+X = fast_fourier_transform(x)
+print(X)
+# => [(6+0j), (-2+2j), (-2+0j), (-2-2j)]
+x = inverse_fast_fourier_transform(X)
+print(x)
+# => [0j, (1+0j), (2+0j), (3+0j)]
+{% endhighlight %}
+
+Now that we know how to compute the Discrete Fourier Transform efficiently, let’s see how we can apply this to a practical problem – polynomial multiplication. [2]
+
+Let’s say we have an $$n$$-length polynomial $$A(x) = a_0 + a_1 x + a_2 x^2 + \ldots + a_{n-1} x^{n-1}$$ that we want to multiply with another $$n$$-length polynomial $$B(x) = b_0 + b_1 x + b_2 x^2 + \ldots + b_{n-1} x^{n-1}$$. The polynomials can have different lengths, but for simplicity we'll assume the polynomials have the same length, since we can always zero-pad the shorter polynomial to match the longer polynomial. Similarly, we'll assume that the length of the polynomial is a power of two, since we can always zero-pad the polynomial to have the number of terms equal the next largest power of two. [3]
+
+Let $$C(x) = A(x)B(x)$$ be the product of the two polynomials. $$C(x)$$ will be a $$(2n-1)$$-length polynomial with coefficients
+
+$$c_i = \sum_{k=0}^i a_k b_{i-k}$$
+
+for $$i = 0 \ldots 2n-2$$ (we zero-pad the $$a_i$$ and $$b_i$$ coefficients for $$i = n \ldots 2n - 2$$).
+Notice that we’ve seen this formula before – the coefficient array $$c[i]$$ is the convolution of $$a[i]$$ and $$b[i]$$!
+
+Computing the convolution $$c[i] = a[i] * b[i]$$ naively takes $$O(n^2)$$, since there are $$O(n)$$ terms and computing each term takes $$O(n)$$ time. However, from the Convolution Theorem, we know that
+
+$$c[i] = IDFT(DFT(a[i]) DFT(b[i]))$$
+
+so we can compute the Discrete Fourier Transform of $$a[i]$$ and $$b[i]$$ in $$O(n \log n)$$ time, take the vector dot product in $$O(n)$$ time, and then compute the Inverse Discrete Fourier Transform in $$O(n \log n)$$ time. This results in an algorithm that takes $$O(n \log n)$$ time instead!
+
+Here’s the python code to do that using the Fast Fourier Transform algorithm from before:
+{% highlight python %}
+# Polynomial Multiplication
+def polynomial_multiplication(A, B):
+    a_length, b_length = len(A), len(B)
+    N = max(a_length, b_length)
+    # round N to next largest power of two
+    N = 2 ** math.ceil(math.log(N, 2))
+    # zerofill coefficient arrays to 2N
+    A = A + [0] * (2 * N - len(A))
+    B = B + [0] * (2 * N - len(B))
+    # use FFT to get point-value representation of A and B
+    A_pv = fast_fourier_transform(A)
+    B_pv = fast_fourier_transform(B)
+    # multiply point-values to get point-value representation of C
+    C_pv = [a_pv * b_pv for a_pv, b_pv in zip(A_pv, B_pv)]
+    # use IFFT to get coefficient representation of C
+    C = inverse_fast_fourier_transform(C_pv)
+    # round and concatenate to correct length
+    return [round(c.real) for c in C[:a_length + b_length]]
+
+A = [1, 2, 3, 4]
+B = [5, 6, 7, 8]
+print(polynomial_multiplication(A, B))
+# => [5, 16, 34, 60, 61, 52, 32, 0]
+{% endhighlight %}
+
+[0] [3blue1brown’s video of the Fourier Transform](https://www.youtube.com/watch?v=spUNpyF58BY) is a great visualization of what’s happening.
+
+[1] Technically this is the circular discrete convolution of the two signals, since we’re assuming that the original signals are periodic (representable as a finite vector), and so the convolution will be periodic (also representable as a finite vector).
+
+[2] [Reducible’s video on the Fast Fourier Transform](https://www.youtube.com/watch?v=h7apO7q16V0) builds up to the algorithm directly from the polynomial multiplication use case.
+
+[3] We’re using lengths rather than degrees because of the zero-padding.
