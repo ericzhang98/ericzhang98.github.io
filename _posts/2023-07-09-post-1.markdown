@@ -5,7 +5,12 @@ date: 2023-07-09 13:00:42 -0700
 ---
 
 {% include math.html %}
-I want to brush up on some of the math topics I learned about in undergrad, and so the topic of choice today is to relearn the Fourier Transform – its continuous and discrete versions, and the Cooley-Tukey algorithm for computing it quickly. It’s one of the most important algorithmic discoveries of the 20th century and is ubiquitous in modern technology.
+
+# Outline
+
+I wanted to brush up on some of the math topics I learned about in undergrad, and so the topic of choice today is to relearn the Fourier Transform – its continuous and discrete versions, and the Cooley-Tukey algorithm for computing it quickly. It’s one of the most important algorithmic discoveries of the 20th century and is ubiquitous in modern technology. We'll also look at a practical application of this algorithm to multiply polynomials efficiently.
+
+# Fourier Transform basics
 
 Let’s start by reviewing the continuous Fourier Transform:
 
@@ -52,6 +57,8 @@ We are again just summing up the weighted superposition of one signal being “s
 
 Just like its continuous version, the discrete convolution can also be computed more efficiently by taking the Discrete Fourier Transform of both signals, multiplying them (vector dot product), and then applying the Inverse Discrete Fourier Transform.
 
+# Computation
+
 With this refresher of the Fourier Transform and convolution, we’re now ready to start exploring how to compute them in practice. Our first goal is to write a simple program that calculates the Discrete Fourier Transform and its inverse naively.
 
 Each output term $$X[k]$$ for a particular frequency $$k$$ is:
@@ -96,7 +103,9 @@ print(x)
 # => [0j, (1+0j), (2+0j), (3+0j)]
 {% endhighlight %}
 
-Alright, so how can we speed this up? Well it turns out there are some special properties involving the roots of unity that we can use.
+# Gotta go fast
+
+Alright, so now we have an $$O(N^2)$$ algorithm, but can we go faster? Well it turns out there's a special property of the roots of unity that we can use.
 
 The $$N$$ different $$N$$th roots of unity are $$\omega_N^k = e^{-j\frac{2\pi}{N}k}$$ for $$k = 0 \ldots N-1$$. The principal $$N$$th root of unity is $$\omega_N^1 = e^{-j\frac{2\pi}{N}}$$, with the other $$N-1$$ roots being different powers of the principal $$N$$th root.
 
@@ -132,7 +141,9 @@ $$DFT(\omega_N^k) = DFT^{even}((\omega_N^{k})^2) + DFT^{odd}((\omega_N^{k})^2) \
 
 $$= DFT^{even}(\omega_{N/2}^{k}) + DFT^{odd}(\omega_{N/2}^{k}) \cdot \omega_N^k$$
 
-using the halving lemma from earlier since $$\omega_N^{2k} = \omega_{N/2}^k$$. Thus, the original $$N$$-length Fourier Transform polynomial can be computed using the results of the $$N/2$$-length Fourier Transform containing the original polynomial’s even and odd coefficients. Ok, so we’ve written the equation as 2 recursive sub-problems of half size, but haven’t gained any efficiency yet since we still need to compute these sub-problems for each $$k$$, so what now? Well, the clever insight, using the halving lemma we mentioned earlier, is that
+using the halving lemma from earlier since $$\omega_N^{2k} = \omega_{N/2}^k$$.
+
+Thus, the original $$N$$-length Fourier Transform polynomial can be computed using the results of the $$N/2$$-length Fourier Transform containing the original polynomial’s even and odd coefficients. Ok, so we’ve written the equation as 2 recursive sub-problems of half size, but haven’t gained any efficiency yet since we still need to compute these sub-problems for each $$k$$, so what now? Well, the clever insight, using the halving lemma we mentioned earlier, is that
 
 $$DFT(\omega_N^{k+N/2}) = DFT^{even}((\omega_N^{(k+N/2)})^2) + DFT^{odd}((\omega_N^{k+N/2})^2) \cdot \omega_N^{k+N/2}$$
 
@@ -213,6 +224,8 @@ print(x)
 # => [0j, (1+0j), (2+0j), (3+0j)]
 {% endhighlight %}
 
+# Let's use this on a problem
+
 Now that we know how to compute the Discrete Fourier Transform efficiently, let’s see how we can apply this to a practical problem – polynomial multiplication. [2]
 
 Let’s say we have an $$n$$-length polynomial $$A(x) = a_0 + a_1 x + a_2 x^2 + \ldots + a_{n-1} x^{n-1}$$ that we want to multiply with another $$n$$-length polynomial $$B(x) = b_0 + b_1 x + b_2 x^2 + \ldots + b_{n-1} x^{n-1}$$. The polynomials can have different lengths, but for simplicity we'll assume the polynomials have the same length, since we can always zero-pad the shorter polynomial to match the longer polynomial. Similarly, we'll assume that the length of the polynomial is a power of two, since we can always zero-pad the polynomial to have the number of terms equal the next largest power of two. [3]
@@ -238,13 +251,13 @@ def polynomial_multiplication(A, B):
     N = max(a_length, b_length)
     # round N to next largest power of two
     N = 2 ** math.ceil(math.log(N, 2))
-    # zerofill coefficient arrays to 2N
+    # zero-pad coefficient arrays to 2N
     A = A + [0] * (2 * N - len(A))
     B = B + [0] * (2 * N - len(B))
     # use FFT to get point-value representation of A and B
     A_pv = fast_fourier_transform(A)
     B_pv = fast_fourier_transform(B)
-    # multiply point-values to get point-value representation of C
+    # multiply point-values of A and B to get point-value representation of C
     C_pv = [a_pv * b_pv for a_pv, b_pv in zip(A_pv, B_pv)]
     # use IFFT to get coefficient representation of C
     C = inverse_fast_fourier_transform(C_pv)
